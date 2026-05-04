@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node", "node-cron", "node-telegram-bot-api"]
   },
   "include": ["src"],
   "references": [
