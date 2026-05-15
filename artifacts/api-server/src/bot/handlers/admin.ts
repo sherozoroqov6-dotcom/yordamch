@@ -65,8 +65,8 @@ export function registerAdminHandlers(bot: TelegramBot): void {
       if (!allUsers.length) { await bot.sendMessage(chatId, "Hozircha tasdiqlangan foydalanuvchilar yo'q."); return; }
       await bot.sendMessage(
         chatId,
-        `👥 *Foydalanuvchilar ro'yxati (${allUsers.length} ta):*\n\n🗑️ O'chirish tugmasi bosilsa foydalanuvchi bloklanadi.`,
-        { parse_mode: "Markdown", reply_markup: kb.approvedUsersListKeyboard(allUsers, DIVISIONS) }
+        `👥 *Foydalanuvchilar ro'yxati (${allUsers.length} ta):*\n\n🗑️ — foydalanuvchini bloklash`,
+        { parse_mode: "Markdown", reply_markup: kb.approvedUsersGroupedKeyboard(allUsers, DIVISIONS) }
       );
 
     } else if (text === "🏢 Bo'lim rahbarlari") {
@@ -229,6 +229,13 @@ export function registerAdminHandlers(bot: TelegramBot): void {
       await bot.answerCallbackQuery(query.id, { text: `✅ ${targetUser.fullName || targetUser.username} ga ruxsat berildi!` });
       await bot.sendMessage(Number(targetId), "✅ Sizga botdan foydalanish ruxsati berildi!\n\n/start bosing.");
 
+      // Xodimni bo'limga biriktirish uchun so'rov
+      await bot.sendMessage(
+        chatId,
+        `📌 *${targetUser.fullName || targetUser.username}* ni qaysi bo'limga biriktirmoqchisiz?`,
+        { parse_mode: "Markdown", reply_markup: kb.divisionSelectorForUserKeyboard(targetId, DIVISIONS) }
+      );
+
       // Ro'yxatni yangilash
       const remaining = store.getAllUsers().filter((u) => !u.isAllowed);
       if (!remaining.length) {
@@ -285,6 +292,27 @@ export function registerAdminHandlers(bot: TelegramBot): void {
       return;
     }
 
+    // --- Assign division to approved employee ---
+    if (data.startsWith("emp_div_")) {
+      // format: emp_div_<userId>_div_<N>
+      const rawParts = data.slice("emp_div_".length);
+      const divMatch = rawParts.match(/^(.+?)_(div_\d+)$/);
+      if (!divMatch) return;
+      const [, empId, divId] = divMatch;
+      const empUser = store.getUser(empId);
+      if (!empUser) return;
+      empUser.divisionId = divId;
+      store.setUser(empUser);
+      await sheets.saveUser(empUser);
+      const divName = DIVISIONS[divId] || divId;
+      await bot.answerCallbackQuery(query.id, { text: `✅ ${empUser.fullName || empUser.username} → ${divName}` });
+      await bot.editMessageText(
+        `✅ *${empUser.fullName || empUser.username}* — *${divName}* bo'limiga biriktirildi.`,
+        { chat_id: chatId, message_id: msgId, parse_mode: "Markdown" }
+      ).catch(() => {});
+      return;
+    }
+
     // --- Delete (block) approved user ---
     if (data.startsWith("del_user_")) {
       const targetId = data.replace("del_user_", "");
@@ -306,11 +334,11 @@ export function registerAdminHandlers(bot: TelegramBot): void {
         }).catch(() => {});
       } else {
         await bot.editMessageText(
-          `👥 *Foydalanuvchilar ro'yxati (${remaining.length} ta):*\n\n🗑️ O'chirish tugmasi bosilsa foydalanuvchi bloklanadi.`,
+          `👥 *Foydalanuvchilar ro'yxati (${remaining.length} ta):*\n\n🗑️ — foydalanuvchini bloklash`,
           {
             chat_id: chatId, message_id: msgId,
             parse_mode: "Markdown",
-            reply_markup: kb.approvedUsersListKeyboard(remaining, DIVISIONS),
+            reply_markup: kb.approvedUsersGroupedKeyboard(remaining, DIVISIONS),
           }
         ).catch(() => {});
       }

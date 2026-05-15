@@ -166,6 +166,72 @@ export function approvedUsersListKeyboard(
   return { inline_keyboard: rows };
 }
 
+export function approvedUsersGroupedKeyboard(
+  users: User[],
+  divisions: Record<string, string>
+): TelegramBot.InlineKeyboardMarkup {
+  const rows: TelegramBot.InlineKeyboardButton[][] = [];
+
+  const divisionIds = Object.keys(divisions);
+  const shownIds = new Set<string>();
+
+  for (const divId of divisionIds) {
+    const head = users.find((u) => u.role === "division_head" && u.divisionId === divId);
+    const emps = users.filter((u) => u.role === "employee" && u.divisionId === divId);
+    if (!head && !emps.length) continue;
+
+    rows.push([{ text: `🏢 ${divisions[divId]}`, callback_data: "noop" }]);
+
+    if (head) {
+      const name = (head.fullName || head.username || head.telegramId).slice(0, 22);
+      rows.push([
+        { text: `👔 ${name}`, callback_data: "noop" },
+        { text: "🗑️ O'chirish", callback_data: `del_user_${head.telegramId}` },
+      ]);
+      shownIds.add(head.telegramId);
+    }
+    for (const e of emps) {
+      const name = (e.fullName || e.username || e.telegramId).slice(0, 22);
+      rows.push([
+        { text: `👤 ${name}`, callback_data: "noop" },
+        { text: "🗑️ O'chirish", callback_data: `del_user_${e.telegramId}` },
+      ]);
+      shownIds.add(e.telegramId);
+    }
+  }
+
+  const unassigned = users.filter((u) => !shownIds.has(u.telegramId));
+  if (unassigned.length) {
+    rows.push([{ text: "📋 Bo'lim tayinlanmagan", callback_data: "noop" }]);
+    for (const u of unassigned) {
+      const name = (u.fullName || u.username || u.telegramId).slice(0, 22);
+      rows.push([
+        { text: `👤 ${name}`, callback_data: "noop" },
+        { text: "🗑️ O'chirish", callback_data: `del_user_${u.telegramId}` },
+      ]);
+    }
+  }
+
+  return { inline_keyboard: rows };
+}
+
+export function divisionSelectorForUserKeyboard(
+  userId: string,
+  divisions: Record<string, string>
+): TelegramBot.InlineKeyboardMarkup {
+  const entries = Object.entries(divisions);
+  const rows: TelegramBot.InlineKeyboardButton[][] = [];
+  for (let i = 0; i < entries.length; i += 2) {
+    rows.push(
+      entries.slice(i, i + 2).map(([divId, divName]) => ({
+        text: divName,
+        callback_data: `emp_div_${userId}_${divId}`,
+      }))
+    );
+  }
+  return { inline_keyboard: rows };
+}
+
 export function assignRoleKeyboard(telegramId: string): TelegramBot.InlineKeyboardMarkup {
   return {
     inline_keyboard: [
