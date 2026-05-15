@@ -3,31 +3,26 @@ import OpenAI from "openai";
 import { logger } from "../../lib/logger";
 import * as store from "../utils/store";
 import * as kb from "../utils/keyboards";
+import { performWebSearch } from "../utils/websearch";
 
-const SYSTEM_PROMPT_NORMAL = `Siz "AI Yordamchi" bo'lib, tashkilot xodimlari uchun ishlaysiz.
-Har qanday savolga aniq, foydali va to'liq javob bering.
-O'zbek tilida javob bering. Hisob-kitob, tahlil, matn yozish, tarjima, maslahat — barchasini qila olasiz.
-Javoblaringiz tushunarli, tuzilgan va amaliy bo'lsin.`;
+const SYSTEM_PROMPT_BASE = `Siz "AI Yordamchi" — tashkilot xodimlari uchun yuqori darajadagi ekspert yordamchisiz.
+O'zbek tilida javob bering. Zarur bo'lsa rus va ingliz tillarida ham javob bera olasiz.
+Hisob-kitob, tahlil, matn yozish, tarjima, huquqiy maslahat, qonunchilik — barchasini qila olasiz.`;
 
-const SYSTEM_PROMPT_DEEP = `Siz yuqori darajadagi "AI Yordamchi" ekspert tahlilchisiz.
+const SYSTEM_PROMPT_NORMAL = `${SYSTEM_PROMPT_BASE}
+Aniq, foydali va tushunarli javob bering.`;
+
+const SYSTEM_PROMPT_DEEP = `${SYSTEM_PROMPT_BASE}
 Har qanday savolni chuqur va keng ko'lamda tahlil qiling:
-
 1. Savolning mohiyatini to'liq tushuning
 2. Barcha muhim jihatlarni va bog'liq sohalarni ko'rib chiqing
-3. Bir nechta nuqtai nazardan baholang (ijobiy/salbiy, imkoniyat/xavf, sabab/oqibat va h.k.)
+3. Bir nechta nuqtai nazardan baholang (ijobiy/salbiy, imkoniyat/xavf, sabab/oqibat)
 4. Amaliy misollar, faktlar va mantiqiy dalillar keltiring
 5. Xulosani aniq va amaliy tavsiyalar bilan yakunlang
-
-O'zbek tilida javob bering. Javobni tuzilgan va bo'limlar bo'yicha yozing.
-Har bir savol uchun kamida 500 so'z hajmida keng qamrovli javob tayyorlang.`;
+Javobni bo'limlar bo'yicha tuzilgan holda yozing.`;
 
 const ANALYSIS_PROMPT = `Quyidagi savolni ko'rib chiqing va qisqacha tahlil rejasi tuzing (JSON formatida):
-{
-  "mavzu": "savolning asosiy mavzusi",
-  "jihatlar": ["ko'rib chiqiladigan jihat 1", "jihat 2", "jihat 3", ...],
-  "soha": "soha nomi (texnologiya/iqtisodiyot/sog'liqni saqlash/ta'lim/va h.k.)"
-}
-
+{"mavzu":"savolning asosiy mavzusi","jihatlar":["jihat 1","jihat 2","jihat 3"],"soha":"soha nomi"}
 Faqat JSON qaytaring, boshqa matn yo'q.`;
 
 function getAIClient(): { client: OpenAI; model: string } {
@@ -52,13 +47,13 @@ function getAIClient(): { client: OpenAI; model: string } {
 }
 
 type AIChatMessage = { role: "user" | "assistant"; content: string };
-type AIUserState = { history: AIChatMessage[]; deepMode: boolean };
+type AIUserState = { history: AIChatMessage[]; deepMode: boolean; webMode: boolean };
 
 const userStates = new Map<string, AIUserState>();
 
 function getUserState(id: string): AIUserState {
   if (!userStates.has(id)) {
-    userStates.set(id, { history: [], deepMode: false });
+    userStates.set(id, { history: [], deepMode: false, webMode: false });
   }
   return userStates.get(id)!;
 }
@@ -77,10 +72,7 @@ async function sendSafe(
   for (let i = 0; i < chunks.length; i++) {
     const markup = i === chunks.length - 1 ? replyMarkup : undefined;
     try {
-      await bot.sendMessage(chatId, chunks[i], {
-        parse_mode: "Markdown",
-        reply_markup: markup,
-      });
+      await bot.sendMessage(chatId, chunks[i], { parse_mode: "Markdown", reply_markup: markup });
     } catch {
       await bot.sendMessage(chatId, chunks[i], { reply_markup: markup });
     }
@@ -110,58 +102,25 @@ async function analyzeQuestion(
   }
 }
 
-async function deepAnalysis(
-  client: OpenAI,
-  model: string,
+async function buildContextWithWeb(
   question: string,
-  history: AIChatMessage[],
   bot: TelegramBot,
   chatId: number,
   statusMsgId: number
 ): Promise<string> {
-  await bot.editMessageText("🔍 Savol tahlil qilinmoqda...", {
-    chat_id: chatId,
-    message_id: statusMsgId,
-  });
-
-  const plan = await analyzeQuestion(client, model, question);
-
-  if (plan) {
-    const planText = `📋 *Tahlil rejasi*\n\n*Mavzu:* ${plan.mavzu}\n*Soha:* ${plan.soha}\n\n*Ko'rib chiqiladigan jihatlar:*\n${plan.jihatlar.map((j, i) => `${i + 1}. ${j}`).join("\n")}\n\n⏳ Chuqur javob tayyorlanmoqda...`;
-    try {
-      await bot.editMessageText(planText, {
-        chat_id: chatId,
-        message_id: statusMsgId,
-        parse_mode: "Markdown",
-      });
-    } catch {
-      await bot.editMessageText(planText.replace(/\*/g, ""), {
-        chat_id: chatId,
-        message_id: statusMsgId,
-      });
-    }
-  } else {
-    await bot.editMessageText("🔎 Keng qamrovli javob tayyorlanmoqda...", {
+  try {
+    await bot.editMessageText("🌐 Internetdan ma'lumot qidirilmoqda...", {
       chat_id: chatId,
       message_id: statusMsgId,
     });
+    const searchResult = await performWebSearch(question, true);
+    return searchResult
+      ? `\n\n[Internetdan topilgan ma'lumotlar]:\n${searchResult}\n\n[Yuqoridagi ma'lumotlarga asoslanib javob bering, manba URL larini ham ko'rsating]`
+      : "";
+  } catch (err) {
+    logger.warn({ err }, "Web qidiruv xato");
+    return "";
   }
-
-  const deepQuestion = plan
-    ? `${question}\n\n[Quyidagi jihatlarni albatta qamrab oling: ${plan.jihatlar.join(", ")}]`
-    : question;
-
-  const res = await client.chat.completions.create({
-    model,
-    max_tokens: 8192,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT_DEEP },
-      ...history.slice(-10),
-      { role: "user", content: deepQuestion },
-    ],
-  });
-
-  return res.choices[0]?.message?.content || "Javob olishda xatolik yuz berdi.";
 }
 
 export function registerAIAssistantHandlers(bot: TelegramBot): void {
@@ -175,11 +134,14 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
 
     if (msg.text === "🤖 AI Yordamchi") {
       store.setSession(id, { state: "ai_chat" });
-      userStates.set(id, { history: [], deepMode: false });
+      userStates.set(id, { history: [], deepMode: false, webMode: false });
       await bot.sendMessage(
         chatId,
-        "🤖 *AI Yordamchi*\n\nSavol yuboring — har qanday mavzuda yordam beraman!\n\n💡 *Oddiy rejim:* Aniq va qisqacha javob\n🔍 *Chuqur tahlil rejimi:* Ko'p jihatdan keng qamrovli tahlil\n\n*Chuqur tahlil* tugmasi orqali rejimni o'zgartiring.\n\n❌ Chiqish uchun /stop yozing.",
-        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(false) }
+        "🤖 *AI Yordamchi*\n\nSavol yuboring — har qanday mavzuda yordam beraman!\n\n" +
+          "🌐 *Web qidiruv* — Google, lex.uz va boshqa saytlardan real ma'lumot\n" +
+          "🔍 *Chuqur tahlil* — Ko'p jihatdan keng qamrovli tahlil\n\n" +
+          "Tugmalar orqali rejimlarni yoqing/o'chiring.\n\n❌ Chiqish uchun /stop yozing.",
+        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(false, false) }
       );
       return;
     }
@@ -188,12 +150,34 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
 
     const state = getUserState(id);
 
+    // Web rejim toggle
+    if (msg.text === "🌐 Web: OFF") {
+      state.webMode = true;
+      await bot.sendMessage(
+        chatId,
+        "🌐 *Web qidiruv YOQILDI*\n\nEndi Google, lex.uz va boshqa saytlardan real vaqt ma'lumotlari olinadi.",
+        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(state.deepMode, true) }
+      );
+      return;
+    }
+
+    if (msg.text === "🌐 Web: ON") {
+      state.webMode = false;
+      await bot.sendMessage(
+        chatId,
+        "🌐 *Web qidiruv o'chirildi*\n\nFaqat AI bilimlaridan foydalaniladi.",
+        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(state.deepMode, false) }
+      );
+      return;
+    }
+
+    // Chuqur tahlil toggle
     if (msg.text === "🔍 Chuqur tahlil: OFF") {
       state.deepMode = true;
       await bot.sendMessage(
         chatId,
-        "🔍 *Chuqur tahlil rejimi YOQILDI*\n\nEndi har bir savolingizni chuqur tahlil qilib, keng ko'lamda javob beraman.",
-        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(true) }
+        "🔍 *Chuqur tahlil rejimi YOQILDI*\n\nHar bir savol ko'p jihatdan keng qamrovli tahlil qilinadi.",
+        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(true, state.webMode) }
       );
       return;
     }
@@ -202,27 +186,26 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
       state.deepMode = false;
       await bot.sendMessage(
         chatId,
-        "💬 *Oddiy rejimga o'tildi*\n\nQisqa va aniq javoblar beriladi.",
-        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(false) }
+        "💬 *Oddiy rejimga o'tildi*",
+        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(false, state.webMode) }
       );
       return;
     }
 
     if (msg.text === "🔄 Yangi suhbat") {
-      userStates.set(id, { history: [], deepMode: state.deepMode });
-      await bot.sendMessage(
-        chatId,
-        "✅ Suhbat tozalandi. Yangi savol yuboring.",
-        { reply_markup: kb.aiChatKeyboard(state.deepMode) }
-      );
+      userStates.set(id, { history: [], deepMode: state.deepMode, webMode: state.webMode });
+      await bot.sendMessage(chatId, "✅ Suhbat tozalandi. Yangi savol yuboring.", {
+        reply_markup: kb.aiChatKeyboard(state.deepMode, state.webMode),
+      });
       return;
     }
 
     if (msg.text === "❌ Chiqish" || msg.text === "/stop") {
       store.clearSession(id);
       userStates.delete(id);
-      const mainKb = getMainKeyboard(user.role);
-      await bot.sendMessage(chatId, "↩️ Asosiy menyu", { reply_markup: mainKb });
+      await bot.sendMessage(chatId, "↩️ Asosiy menyu", {
+        reply_markup: getMainKeyboard(user.role),
+      });
       return;
     }
 
@@ -235,23 +218,90 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
     state.history.push({ role: "user", content: userText });
     if (state.history.length > 20) state.history.splice(0, state.history.length - 20);
 
-    const statusText = state.deepMode
-      ? "🔍 Tahlil boshlanmoqda..."
-      : "⏳ Javob tayyorlanmoqda...";
-    const statusMsg = await bot.sendMessage(chatId, statusText);
+    const modeLabel =
+      state.webMode && state.deepMode
+        ? "🌐🔍 Qidirib, chuqur tahlil qilinmoqda..."
+        : state.webMode
+          ? "🌐 Internetdan qidirilmoqda..."
+          : state.deepMode
+            ? "🔍 Tahlil boshlanmoqda..."
+            : "⏳ Javob tayyorlanmoqda...";
+
+    const statusMsg = await bot.sendMessage(chatId, modeLabel);
 
     try {
       const { client, model } = getAIClient();
+
+      // Web ma'lumotlarini olish
+      let webContext = "";
+      if (state.webMode) {
+        webContext = await buildContextWithWeb(userText, bot, chatId, statusMsg.message_id);
+      }
+
       let reply: string;
 
       if (state.deepMode) {
-        reply = await deepAnalysis(client, model, userText, state.history, bot, chatId, statusMsg.message_id);
+        // Tahlil rejasi
+        const plan = await (async () => {
+          if (!state.webMode) {
+            await bot.editMessageText("🔍 Savol tahlil qilinmoqda...", {
+              chat_id: chatId,
+              message_id: statusMsg.message_id,
+            });
+          }
+          return analyzeQuestion(client, model, userText);
+        })();
+
+        if (plan) {
+          const planText =
+            `📋 *Tahlil rejasi*\n\n*Mavzu:* ${plan.mavzu}\n*Soha:* ${plan.soha}\n\n` +
+            `*Ko'rib chiqiladigan jihatlar:*\n${plan.jihatlar.map((j, i) => `${i + 1}. ${j}`).join("\n")}\n\n⏳ Javob yozilmoqda...`;
+          try {
+            await bot.editMessageText(planText, {
+              chat_id: chatId,
+              message_id: statusMsg.message_id,
+              parse_mode: "Markdown",
+            });
+          } catch {
+            await bot.editMessageText(planText.replace(/\*/g, ""), {
+              chat_id: chatId,
+              message_id: statusMsg.message_id,
+            });
+          }
+        } else {
+          await bot.editMessageText("⏳ Keng qamrovli javob yozilmoqda...", {
+            chat_id: chatId,
+            message_id: statusMsg.message_id,
+          }).catch(() => {});
+        }
+
+        const deepQuestion = plan
+          ? `${userText}\n\n[Albatta qamrab oling: ${plan.jihatlar.join(", ")}]`
+          : userText;
+
+        const res = await client.chat.completions.create({
+          model,
+          max_tokens: 8192,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT_DEEP + webContext },
+            ...state.history.slice(-10),
+            { role: "user", content: deepQuestion },
+          ],
+        });
+        reply = res.choices[0]?.message?.content || "Javob olishda xatolik yuz berdi.";
       } else {
+        if (state.webMode) {
+          await bot.editMessageText("⏳ Javob tayyorlanmoqda...", {
+            chat_id: chatId,
+            message_id: statusMsg.message_id,
+          }).catch(() => {});
+        }
+
         const res = await client.chat.completions.create({
           model,
           max_tokens: 4096,
           messages: [
-            { role: "system", content: SYSTEM_PROMPT_NORMAL },
+            { role: "system", content: SYSTEM_PROMPT_NORMAL + webContext },
             ...state.history,
           ],
         });
@@ -260,8 +310,8 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
 
       state.history.push({ role: "assistant", content: reply });
 
-      await bot.deleteMessage(chatId, statusMsg.message_id);
-      await sendSafe(bot, chatId, reply, kb.aiChatKeyboard(state.deepMode));
+      await bot.deleteMessage(chatId, statusMsg.message_id).catch(() => {});
+      await sendSafe(bot, chatId, reply, kb.aiChatKeyboard(state.deepMode, state.webMode));
     } catch (err) {
       logger.error({ err }, "AI javobida xato");
       const errMsg =
@@ -269,10 +319,7 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
           ? `❌ ${err.message}`
           : "❌ AI javob berishda xatolik yuz berdi. Qayta urinib ko'ring.";
       try {
-        await bot.editMessageText(errMsg, {
-          chat_id: chatId,
-          message_id: statusMsg.message_id,
-        });
+        await bot.editMessageText(errMsg, { chat_id: chatId, message_id: statusMsg.message_id });
       } catch {
         await bot.sendMessage(chatId, errMsg);
       }

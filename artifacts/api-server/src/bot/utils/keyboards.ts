@@ -38,14 +38,14 @@ export function employeeMainKeyboard(): TelegramBot.ReplyKeyboardMarkup {
   };
 }
 
-export function aiChatKeyboard(deepMode = false): TelegramBot.ReplyKeyboardMarkup {
+export function aiChatKeyboard(deepMode = false, webMode = false): TelegramBot.ReplyKeyboardMarkup {
   return {
     keyboard: [
       [
+        { text: webMode ? "🌐 Web: ON" : "🌐 Web: OFF" },
         { text: deepMode ? "🔍 Chuqur tahlil: ON" : "🔍 Chuqur tahlil: OFF" },
-        { text: "🔄 Yangi suhbat" },
       ],
-      [{ text: "❌ Chiqish" }],
+      [{ text: "🔄 Yangi suhbat" }, { text: "❌ Chiqish" }],
     ],
     resize_keyboard: true,
   };
