@@ -110,19 +110,16 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
       chatHistories.set(id, history);
 
       await bot.deleteMessage(chatId, typingMsg.message_id);
-      // FIX: Use sendSafe which falls back to plain text if Markdown fails.
-      // AI responses often contain *, _, `, [ characters that break Telegram's
-      // Markdown parser when they appear in unexpected positions.
       await sendSafe(bot, chatId, reply, kb.aiChatKeyboard());
     } catch (err) {
       logger.error({ err }, "AI javobida xato");
+      const errMessage = err instanceof Error && err.message.includes("sozlanmagan")
+        ? `❌ ${err.message}`
+        : "❌ AI javob berishda xatolik yuz berdi. Qayta urinib ko'ring.";
       try {
-        await bot.editMessageText(
-          "❌ AI javob berishda xatolik yuz berdi. Qayta urinib ko'ring.",
-          { chat_id: chatId, message_id: typingMsg.message_id }
-        );
+        await bot.editMessageText(errMessage, { chat_id: chatId, message_id: typingMsg.message_id });
       } catch {
-        await bot.sendMessage(chatId, "❌ AI javob berishda xatolik yuz berdi. Qayta urinib ko'ring.");
+        await bot.sendMessage(chatId, errMessage);
       }
     }
   });
