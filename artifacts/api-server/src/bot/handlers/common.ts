@@ -54,6 +54,7 @@ export function registerCommonHandlers(bot: TelegramBot): void {
 
     const newUser = { telegramId: id, username, fullName, role: "employee" as const, isAllowed: false };
     store.setUser(newUser);
+    await sheets.saveUser(newUser).catch((err) => logger.error({ err }, "Yangi foydalanuvchini saqlashda xato"));
 
     await bot.sendMessage(
       msg.chat.id,

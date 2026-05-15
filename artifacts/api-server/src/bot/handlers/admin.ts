@@ -60,9 +60,9 @@ export function registerAdminHandlers(bot: TelegramBot): void {
       );
 
     } else if (text === "👥 Foydalanuvchilar") {
-      const allUsers = store.getAllUsers().filter((u) => u.role !== "admin");
-      if (!allUsers.length) { await bot.sendMessage(chatId, "Hozircha foydalanuvchilar yo'q."); return; }
-      let txt = "👥 *Foydalanuvchilar ro'yxati:*\n\n";
+      const allUsers = store.getAllUsers().filter((u) => u.role !== "admin" && u.isAllowed);
+      if (!allUsers.length) { await bot.sendMessage(chatId, "Hozircha tasdiqlangan foydalanuvchilar yo'q."); return; }
+      let txt = `👥 *Foydalanuvchilar ro'yxati (${allUsers.length} ta):*\n\n`;
       for (const u of allUsers) {
         const divName = u.divisionId ? DIVISIONS[u.divisionId] || u.divisionId : "-";
         txt += `• ${u.fullName || u.username} \`${u.telegramId}\`\n`;
