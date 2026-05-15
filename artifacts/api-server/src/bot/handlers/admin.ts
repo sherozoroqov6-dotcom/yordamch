@@ -76,14 +76,21 @@ export function registerAdminHandlers(bot: TelegramBot): void {
 
     } else if (text === "✅ Ruxsatlar") {
       const pending = store.getAllUsers().filter((u) => !u.isAllowed);
-      if (!pending.length) { await bot.sendMessage(chatId, "Barcha foydalanuvchilarga ruxsat berilgan yoki so'rov yo'q."); return; }
-      for (const u of pending) {
-        await bot.sendMessage(
-          chatId,
-          `👤 *${u.fullName || u.username}*\nID: \`${u.telegramId}\` | @${u.username || "-"}`,
-          { parse_mode: "Markdown", reply_markup: kb.allowUserInlineKeyboard(u.telegramId) }
-        );
+      if (!pending.length) {
+        await bot.sendMessage(chatId, "✅ Hozircha kutayotgan so'rovlar yo'q.");
+        return;
       }
+      let listText = `👥 *Ruxsat kutayotgan foydalanuvchilar (${pending.length} ta):*\n\n`;
+      pending.forEach((u, i) => {
+        listText += `${i + 1}. *${u.fullName || u.username || u.telegramId}*`;
+        if (u.username) listText += ` @${u.username}`;
+        listText += `\n   🆔 \`${u.telegramId}\`\n\n`;
+      });
+      listText += "✅ — ruxsat berish  |  ❌ — rad etish";
+      await bot.sendMessage(chatId, listText, {
+        parse_mode: "Markdown",
+        reply_markup: kb.pendingUsersListKeyboard(pending),
+      });
 
     } else if (text === "📊 Statistika") {
       const statsText = statsUtil.getAdminDivisionStats();
@@ -184,21 +191,69 @@ export function registerAdminHandlers(bot: TelegramBot): void {
     if (data.startsWith("allow_user_")) {
       const targetId = data.replace("allow_user_", "");
       const targetUser = store.getUser(targetId);
-      if (!targetUser) return;
+      if (!targetUser) {
+        await bot.answerCallbackQuery(query.id, { text: "Foydalanuvchi topilmadi." });
+        return;
+      }
       targetUser.isAllowed = true;
       store.setUser(targetUser);
       await sheets.saveUser(targetUser);
-      await bot.sendMessage(chatId, `✅ ${targetUser.fullName || targetUser.username} ga ruxsat berildi.`);
+      await bot.answerCallbackQuery(query.id, { text: `✅ ${targetUser.fullName || targetUser.username} ga ruxsat berildi!` });
       await bot.sendMessage(Number(targetId), "✅ Sizga botdan foydalanish ruxsati berildi!\n\n/start bosing.");
+
+      // Ro'yxatni yangilash
+      const remaining = store.getAllUsers().filter((u) => !u.isAllowed);
+      if (!remaining.length) {
+        await bot.editMessageText("✅ Barcha so'rovlar ko'rib chiqildi.", {
+          chat_id: chatId, message_id: msgId,
+        }).catch(() => {});
+      } else {
+        let listText = `👥 *Ruxsat kutayotgan foydalanuvchilar (${remaining.length} ta):*\n\n`;
+        remaining.forEach((u, i) => {
+          listText += `${i + 1}. *${u.fullName || u.username || u.telegramId}*`;
+          if (u.username) listText += ` @${u.username}`;
+          listText += `\n   🆔 \`${u.telegramId}\`\n\n`;
+        });
+        listText += "✅ — ruxsat berish  |  ❌ — rad etish";
+        await bot.editMessageText(listText, {
+          chat_id: chatId, message_id: msgId,
+          parse_mode: "Markdown",
+          reply_markup: kb.pendingUsersListKeyboard(remaining),
+        }).catch(() => {});
+      }
       return;
     }
     if (data.startsWith("deny_user_")) {
       const targetId = data.replace("deny_user_", "");
       const targetUser = store.getUser(targetId);
-      if (!targetUser) return;
+      if (!targetUser) {
+        await bot.answerCallbackQuery(query.id, { text: "Foydalanuvchi topilmadi." });
+        return;
+      }
       store.removeUser(targetId);
-      await bot.sendMessage(chatId, `❌ ${targetUser.fullName || targetUser.username} rad etildi.`);
+      await bot.answerCallbackQuery(query.id, { text: `❌ ${targetUser.fullName || targetUser.username} rad etildi.` });
       await bot.sendMessage(Number(targetId), "❌ Sizning so'rovingiz rad etildi.");
+
+      // Ro'yxatni yangilash
+      const remaining = store.getAllUsers().filter((u) => !u.isAllowed);
+      if (!remaining.length) {
+        await bot.editMessageText("✅ Barcha so'rovlar ko'rib chiqildi.", {
+          chat_id: chatId, message_id: msgId,
+        }).catch(() => {});
+      } else {
+        let listText = `👥 *Ruxsat kutayotgan foydalanuvchilar (${remaining.length} ta):*\n\n`;
+        remaining.forEach((u, i) => {
+          listText += `${i + 1}. *${u.fullName || u.username || u.telegramId}*`;
+          if (u.username) listText += ` @${u.username}`;
+          listText += `\n   🆔 \`${u.telegramId}\`\n\n`;
+        });
+        listText += "✅ — ruxsat berish  |  ❌ — rad etish";
+        await bot.editMessageText(listText, {
+          chat_id: chatId, message_id: msgId,
+          parse_mode: "Markdown",
+          reply_markup: kb.pendingUsersListKeyboard(remaining),
+        }).catch(() => {});
+      }
       return;
     }
 

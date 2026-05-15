@@ -134,6 +134,21 @@ export function allowUserInlineKeyboard(telegramId: string): TelegramBot.InlineK
   };
 }
 
+export function pendingUsersListKeyboard(
+  users: User[]
+): TelegramBot.InlineKeyboardMarkup {
+  const rows: TelegramBot.InlineKeyboardButton[][] = [];
+  for (const u of users) {
+    const label = (u.fullName || u.username || u.telegramId).slice(0, 25);
+    rows.push([
+      { text: `👤 ${label}`, callback_data: "noop" },
+      { text: "✅", callback_data: `allow_user_${u.telegramId}` },
+      { text: "❌", callback_data: `deny_user_${u.telegramId}` },
+    ]);
+  }
+  return { inline_keyboard: rows };
+}
+
 export function assignRoleKeyboard(telegramId: string): TelegramBot.InlineKeyboardMarkup {
   return {
     inline_keyboard: [
