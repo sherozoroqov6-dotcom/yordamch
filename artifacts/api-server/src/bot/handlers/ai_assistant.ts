@@ -9,18 +9,25 @@ Har qanday savolga aniq, qisqa va foydali javob bering.
 Uzbek tilida javob bering. Hisob-kitob, tahlil, matn yozish, tarjima, maslahat — barchasini qila olasiz.
 Javoblaringiz tushunarli va amaliy bo'lsin.`;
 
-function getOpenAIClient(): OpenAI {
+function getAIClient(): { client: OpenAI; model: string } {
   const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
 
   if (baseURL && replitKey) {
-    return new OpenAI({ baseURL, apiKey: replitKey });
+    return { client: new OpenAI({ baseURL, apiKey: replitKey }), model: "gpt-4o-mini" };
+  }
+  if (groqKey) {
+    return {
+      client: new OpenAI({ baseURL: "https://api.groq.com/openai/v1", apiKey: groqKey }),
+      model: "llama-3.3-70b-versatile",
+    };
   }
   if (openaiKey) {
-    return new OpenAI({ apiKey: openaiKey });
+    return { client: new OpenAI({ apiKey: openaiKey }), model: "gpt-4o-mini" };
   }
-  throw new Error("AI integratsiyasi sozlanmagan. OPENAI_API_KEY yoki AI Integrations kerak.");
+  throw new Error("AI integratsiyasi sozlanmagan. GROQ_API_KEY yoki OPENAI_API_KEY kerak.");
 }
 
 type AIChatMessage = { role: "user" | "assistant"; content: string };
@@ -95,10 +102,10 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
     const typingMsg = await bot.sendMessage(chatId, "⏳ Javob tayyorlanmoqda...");
 
     try {
-      const client = getOpenAIClient();
+      const { client, model } = getAIClient();
       const response = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        max_completion_tokens: 8192,
+        model,
+        max_tokens: 4096,
         messages: [
           { role: "system", content: AI_SYSTEM_PROMPT },
           ...history,
