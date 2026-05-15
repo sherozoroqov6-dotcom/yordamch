@@ -43,7 +43,13 @@ export async function startBot(): Promise<void> {
     "Ma'lumotlar qayta yuklandi"
   );
 
-  const bot = new TelegramBot(token, { polling: true });
+  const bot = new TelegramBot(token, {
+    polling: {
+      interval: 1000,
+      autoStart: true,
+      params: { timeout: 10 },
+    },
+  });
 
   registerCommonHandlers(bot);
   registerAIAssistantHandlers(bot);
@@ -60,9 +66,32 @@ export async function startBot(): Promise<void> {
 
   startScheduler(bot);
 
-  bot.on("polling_error", (err) => {
+  bot.on("polling_error", (err: Error & { code?: string }) => {
+    if (err.code === "ETELEGRAM" && err.message.includes("409")) {
+      logger.warn("409 Conflict: boshqa bot instansi ishlayapti, polling to'xtatilmoqda...");
+      bot.stopPolling().catch(() => {});
+      setTimeout(() => {
+        bot.startPolling().catch((e: Error) => logger.error({ err: e }, "Polling restart xato"));
+      }, 5000);
+      return;
+    }
     logger.error({ err }, "Telegram polling xato");
   });
+
+  // Graceful shutdown — Render SIGTERM yuboradi deploy paytida
+  const shutdown = async (signal: string) => {
+    logger.info({ signal }, "Shutdown signali qabul qilindi, bot to'xtatilmoqda...");
+    try {
+      await bot.stopPolling();
+      logger.info("Bot polling to'xtatildi");
+    } catch (err) {
+      logger.error({ err }, "Bot to'xtatishda xato");
+    }
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 
   logger.info("Telegram bot ishga tushdi");
 }
