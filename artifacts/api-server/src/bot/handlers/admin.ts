@@ -101,20 +101,49 @@ export function registerAdminHandlers(bot: TelegramBot): void {
 
     } else if (text === "📅 Davomat") {
       const today = new Date().toLocaleDateString("uz-UZ");
-      const heads = store.getDivisionHeads();
+      const allAllowed = store.getAllUsers().filter((u) => u.isAllowed && u.role !== "admin");
+      const heads = allAllowed.filter((u) => u.role === "division_head");
+      const employees = allAllowed.filter((u) => u.role === "employee");
+
       let report = `📅 *Bugungi davomat (${today}):*\n\n`;
-      for (const head of heads) {
-        const divName = head.divisionId ? DIVISIONS[head.divisionId] : "?";
-        const employees = store.getUsersByDivision(head.divisionId || "");
-        report += `🏢 *${divName}*\n`;
-        const ha = store.getTodayAttendance(head.telegramId);
-        report += `  👔 ${head.fullName || head.username}: ${ha ? `✅ ${ha.checkInTime}${ha.isLate ? " ⚠️" : ""}` : "❌ Kelmagan"}\n`;
-        for (const emp of employees) {
+
+      // Bo'limlar bo'yicha guruhlash
+      const divisionIds = Object.keys(DIVISIONS);
+      const shownEmployeeIds = new Set<string>();
+
+      for (const divId of divisionIds) {
+        const head = heads.find((h) => h.divisionId === divId);
+        const divEmps = employees.filter((e) => e.divisionId === divId);
+        if (!head && !divEmps.length) continue;
+
+        report += `🏢 *${DIVISIONS[divId]}*\n`;
+        if (head) {
+          const ha = store.getTodayAttendance(head.telegramId);
+          report += `  👔 ${head.fullName || head.username}: ${ha ? `✅ ${ha.checkInTime}${ha.isLate ? " ⚠️" : ""}` : "❌ Kelmagan"}\n`;
+          shownEmployeeIds.add(head.telegramId);
+        }
+        for (const emp of divEmps) {
           const att = store.getTodayAttendance(emp.telegramId);
           report += `  👤 ${emp.fullName || emp.username}: ${att ? `✅ ${att.checkInTime}${att.isLate ? " ⚠️" : ""}` : "❌ Kelmagan"}\n`;
+          shownEmployeeIds.add(emp.telegramId);
         }
         report += "\n";
       }
+
+      // Bo'limga biriktirilmagan foydalanuvchilar
+      const unassigned = allAllowed.filter((u) => !shownEmployeeIds.has(u.telegramId));
+      if (unassigned.length) {
+        report += `📋 *Bo'lim tayinlanmagan*\n`;
+        for (const u of unassigned) {
+          const att = store.getTodayAttendance(u.telegramId);
+          report += `  👤 ${u.fullName || u.username}: ${att ? `✅ ${att.checkInTime}${att.isLate ? " ⚠️" : ""}` : "❌ Kelmagan"}\n`;
+        }
+        report += "\n";
+      }
+
+      const present = allAllowed.filter((u) => !!store.getTodayAttendance(u.telegramId)).length;
+      report += `📊 *Jami: ${present}/${allAllowed.length} kishi kelgan*`;
+
       for (const part of splitMsg(report)) await bot.sendMessage(chatId, part, { parse_mode: "Markdown" });
     }
   });
