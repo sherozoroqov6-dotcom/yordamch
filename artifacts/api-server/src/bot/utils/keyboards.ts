@@ -149,6 +149,23 @@ export function pendingUsersListKeyboard(
   return { inline_keyboard: rows };
 }
 
+export function approvedUsersListKeyboard(
+  users: User[],
+  divisions: Record<string, string>
+): TelegramBot.InlineKeyboardMarkup {
+  const rows: TelegramBot.InlineKeyboardButton[][] = [];
+  for (const u of users) {
+    const roleIcon = u.role === "division_head" ? "👔" : "👤";
+    const divName = u.divisionId ? (divisions[u.divisionId] || u.divisionId) : "—";
+    const name = (u.fullName || u.username || u.telegramId).slice(0, 20);
+    rows.push([
+      { text: `${roleIcon} ${name} | ${divName}`, callback_data: "noop" },
+      { text: "🗑️ O'chirish", callback_data: `del_user_${u.telegramId}` },
+    ]);
+  }
+  return { inline_keyboard: rows };
+}
+
 export function assignRoleKeyboard(telegramId: string): TelegramBot.InlineKeyboardMarkup {
   return {
     inline_keyboard: [

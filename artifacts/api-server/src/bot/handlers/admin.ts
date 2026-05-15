@@ -63,13 +63,11 @@ export function registerAdminHandlers(bot: TelegramBot): void {
     } else if (text === "👥 Foydalanuvchilar") {
       const allUsers = store.getAllUsers().filter((u) => u.role !== "admin" && u.isAllowed);
       if (!allUsers.length) { await bot.sendMessage(chatId, "Hozircha tasdiqlangan foydalanuvchilar yo'q."); return; }
-      let txt = `👥 *Foydalanuvchilar ro'yxati (${allUsers.length} ta):*\n\n`;
-      for (const u of allUsers) {
-        const divName = u.divisionId ? DIVISIONS[u.divisionId] || u.divisionId : "-";
-        txt += `• ${u.fullName || u.username} \`${u.telegramId}\`\n`;
-        txt += `  ${u.role === "division_head" ? "👔 Rahbar" : "👤 Xodim"} | 🏢 ${divName}\n\n`;
-      }
-      await bot.sendMessage(chatId, txt, { parse_mode: "Markdown" });
+      await bot.sendMessage(
+        chatId,
+        `👥 *Foydalanuvchilar ro'yxati (${allUsers.length} ta):*\n\n🗑️ O'chirish tugmasi bosilsa foydalanuvchi bloklanadi.`,
+        { parse_mode: "Markdown", reply_markup: kb.approvedUsersListKeyboard(allUsers, DIVISIONS) }
+      );
 
     } else if (text === "🏢 Bo'lim rahbarlari") {
       store.setSession(id, { state: "admin_assign_head_division" });
@@ -283,6 +281,38 @@ export function registerAdminHandlers(bot: TelegramBot): void {
           parse_mode: "Markdown",
           reply_markup: kb.pendingUsersListKeyboard(remaining),
         }).catch(() => {});
+      }
+      return;
+    }
+
+    // --- Delete (block) approved user ---
+    if (data.startsWith("del_user_")) {
+      const targetId = data.replace("del_user_", "");
+      const targetUser = store.getUser(targetId);
+      if (!targetUser) {
+        await bot.answerCallbackQuery(query.id, { text: "Foydalanuvchi topilmadi." });
+        return;
+      }
+      targetUser.isAllowed = false;
+      store.setUser(targetUser);
+      await sheets.saveUser(targetUser);
+      await bot.answerCallbackQuery(query.id, { text: `🗑️ ${targetUser.fullName || targetUser.username} bloklandi.` });
+      try { await bot.sendMessage(Number(targetId), "🚫 Sizning botga kirishingiz bloklandi. Admin bilan bog'laning."); } catch {}
+
+      const remaining = store.getAllUsers().filter((u) => u.role !== "admin" && u.isAllowed);
+      if (!remaining.length) {
+        await bot.editMessageText("✅ Barcha foydalanuvchilar o'chirildi.", {
+          chat_id: chatId, message_id: msgId,
+        }).catch(() => {});
+      } else {
+        await bot.editMessageText(
+          `👥 *Foydalanuvchilar ro'yxati (${remaining.length} ta):*\n\n🗑️ O'chirish tugmasi bosilsa foydalanuvchi bloklanadi.`,
+          {
+            chat_id: chatId, message_id: msgId,
+            parse_mode: "Markdown",
+            reply_markup: kb.approvedUsersListKeyboard(remaining, DIVISIONS),
+          }
+        ).catch(() => {});
       }
       return;
     }
