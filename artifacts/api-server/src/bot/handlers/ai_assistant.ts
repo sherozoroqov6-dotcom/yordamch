@@ -43,16 +43,8 @@ function getAIClient(): { client: OpenAI; model: string } {
 }
 
 type AIChatMessage = { role: "user" | "assistant"; content: string };
-type AIUserState = { history: AIChatMessage[]; webMode: boolean };
 
-const userStates = new Map<string, AIUserState>();
-
-function getUserState(id: string): AIUserState {
-  if (!userStates.has(id)) {
-    userStates.set(id, { history: [], webMode: false });
-  }
-  return userStates.get(id)!;
-}
+const chatHistories = new Map<string, AIChatMessage[]>();
 
 async function sendSafe(
   bot: TelegramBot,
@@ -109,52 +101,28 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
 
     if (msg.text === "🤖 AI Yordamchi") {
       store.setSession(id, { state: "ai_chat" });
-      userStates.set(id, { history: [], webMode: false });
+      chatHistories.set(id, []);
       await bot.sendMessage(
         chatId,
-        "🤖 *AI Yordamchi*\n\nSavol yuboring — har qanday mavzuda chuqur tahlil qilib javob beraman!\n\n" +
-          "🌐 *Veb qidiruv* — Google, lex.uz va boshqa saytlardan real ma'lumot olish uchun yoqing.\n\n" +
-          "❌ Chiqish uchun /stop yozing.",
-        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(false) }
+        "🤖 *AI Yordamchi*\n\nSavol yuboring — har qanday mavzuda chuqur tahlil qilib, internetdan ma'lumot izlab javob beraman!\n\n❌ Chiqish uchun /stop yozing.",
+        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard() }
       );
       return;
     }
 
     if (session.state !== "ai_chat") return;
 
-    const state = getUserState(id);
-
-    if (msg.text === "🌐 Veb qidiruv: o'chirilgan") {
-      state.webMode = true;
-      await bot.sendMessage(
-        chatId,
-        "🌐 *Veb qidiruv yoqildi*\n\nEndi Google, lex.uz va boshqa saytlardan real vaqt ma'lumotlari olinadi.",
-        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(true) }
-      );
-      return;
-    }
-
-    if (msg.text === "🌐 Veb qidiruv: yoqilgan") {
-      state.webMode = false;
-      await bot.sendMessage(
-        chatId,
-        "🌐 *Veb qidiruv o'chirildi*\n\nFaqat AI bilimlaridan foydalaniladi.",
-        { parse_mode: "Markdown", reply_markup: kb.aiChatKeyboard(false) }
-      );
-      return;
-    }
-
     if (msg.text === "🔄 Yangi suhbat") {
-      userStates.set(id, { history: [], webMode: state.webMode });
+      chatHistories.set(id, []);
       await bot.sendMessage(chatId, "✅ Suhbat tozalandi. Yangi savol yuboring.", {
-        reply_markup: kb.aiChatKeyboard(state.webMode),
+        reply_markup: kb.aiChatKeyboard(),
       });
       return;
     }
 
     if (msg.text === "❌ Chiqish" || msg.text === "/stop") {
       store.clearSession(id);
-      userStates.delete(id);
+      chatHistories.delete(id);
       await bot.sendMessage(chatId, "↩️ Asosiy menyu", {
         reply_markup: getMainKeyboard(user.role),
       });
@@ -167,30 +135,26 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
       return;
     }
 
-    state.history.push({ role: "user", content: userText });
-    if (state.history.length > 20) state.history.splice(0, state.history.length - 20);
+    const history = chatHistories.get(id) || [];
+    history.push({ role: "user", content: userText });
+    if (history.length > 20) history.splice(0, history.length - 20);
 
-    const statusMsg = await bot.sendMessage(
-      chatId,
-      state.webMode ? "🌐 Internetdan qidirilmoqda..." : "🔍 Tahlil boshlanmoqda..."
-    );
+    const statusMsg = await bot.sendMessage(chatId, "🌐 Internetdan qidirilmoqda...");
 
     try {
       const { client, model } = getAIClient();
 
-      // Web qidiruv
+      // Web qidiruv (har doim yoqiq)
       let webContext = "";
-      if (state.webMode) {
-        try {
-          const searchResult = await performWebSearch(userText, true);
-          if (searchResult) {
-            webContext =
-              `\n\n[Internetdan topilgan ma'lumotlar]:\n${searchResult}\n\n` +
-              `[Yuqoridagi ma'lumotlarga asoslanib javob bering, manba URL larini ham ko'rsating]`;
-          }
-        } catch (err) {
-          logger.warn({ err }, "Web qidiruv xato");
+      try {
+        const searchResult = await performWebSearch(userText, true);
+        if (searchResult) {
+          webContext =
+            `\n\n[Internetdan topilgan ma'lumotlar]:\n${searchResult}\n\n` +
+            `[Yuqoridagi ma'lumotlarga asoslanib javob bering, manba URL larini ham ko'rsating]`;
         }
+      } catch (err) {
+        logger.warn({ err }, "Web qidiruv xato");
       }
 
       // Tahlil rejasi
@@ -233,16 +197,17 @@ export function registerAIAssistantHandlers(bot: TelegramBot): void {
         max_tokens: 8192,
         messages: [
           { role: "system", content: SYSTEM_PROMPT + webContext },
-          ...state.history.slice(-10),
+          ...history.slice(-10),
           { role: "user", content: deepQuestion },
         ],
       });
 
       const reply = res.choices[0]?.message?.content || "Javob olishda xatolik yuz berdi.";
-      state.history.push({ role: "assistant", content: reply });
+      history.push({ role: "assistant", content: reply });
+      chatHistories.set(id, history);
 
       await bot.deleteMessage(chatId, statusMsg.message_id).catch(() => {});
-      await sendSafe(bot, chatId, reply, kb.aiChatKeyboard(state.webMode));
+      await sendSafe(bot, chatId, reply, kb.aiChatKeyboard());
     } catch (err) {
       logger.error({ err }, "AI javobida xato");
       const errMsg =
