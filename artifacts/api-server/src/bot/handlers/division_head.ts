@@ -7,6 +7,7 @@ import * as statsUtil from "../utils/stats";
 import * as ms from "../utils/multiselect";
 import * as taskSender from "../utils/taskSender";
 import type { Task } from "../types";
+import { todayStrUz } from "../utils/time";
 
 const MAX_MSG_LEN = 4000;
 function splitMsg(text: string): string[] {
@@ -71,14 +72,14 @@ export function registerDivisionHeadHandlers(bot: TelegramBot): void {
           const remTxt = rem > 0 ? `${rem} daqiqa qoldi` : "🚨 Muddat o'tdi!";
           await bot.sendMessage(
             chatId,
-            `📋 *${task.title}*\n${task.description}\n\n⏰ ${task.deadline.toLocaleString("uz-UZ")} (${remTxt})`,
+            `📋 *${task.title}*\n${task.description}\n\n⏰ ${task.deadline.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })} (${remTxt})`,
             { parse_mode: "Markdown", reply_markup: kb.taskActionsKeyboard(task) }
           );
         }
       }
       if (done.length) {
         let txt = `\n✅ *Bajarilgan (${done.length}):*\n\n`;
-        for (const t of done.slice(-5)) txt += `✅ *${t.title}* — ${t.completedAt?.toLocaleString("uz-UZ") || "-"}\n`;
+        for (const t of done.slice(-5)) txt += `✅ *${t.title}* — ${t.completedAt?.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" }) || "-"}\n`;
         await bot.sendMessage(chatId, txt, { parse_mode: "Markdown" });
       }
 
@@ -110,7 +111,7 @@ export function registerDivisionHeadHandlers(bot: TelegramBot): void {
 
     } else if (text === "📅 Davomat") {
       const employees = store.getUsersByDivision(user.divisionId || "");
-      const today = new Date().toLocaleDateString("uz-UZ");
+      const today = todayStrUz();
       let report = `📅 *Bugungi davomat (${today}):*\n\n`;
       const myAtt = store.getTodayAttendance(id);
       report += `👔 *${user.fullName || user.username} (Rahbar):* ${myAtt ? `✅ ${myAtt.checkInTime}${myAtt.isLate ? " ⚠️ Kech" : ""}` : "❌ Kelmagan"}\n\n👥 *Xodimlar:*\n`;
@@ -299,7 +300,7 @@ async function createAndSendTasks(
 
   await bot.sendMessage(
     chatId,
-    `✅ Topshiriq *${sent}* ta xodimga yuborildi!\n\n📋 *${autoTitle}*\n⏰ Muddat: ${deadline.toLocaleString("uz-UZ")}`,
+    `✅ Topshiriq *${sent}* ta xodimga yuborildi!\n\n📋 *${autoTitle}*\n⏰ Muddat: ${deadline.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })}`,
     { parse_mode: "Markdown" }
   );
 }

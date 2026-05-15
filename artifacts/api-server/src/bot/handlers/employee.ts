@@ -8,6 +8,7 @@ import * as taskSender from "../utils/taskSender";
 import * as geo from "../utils/geo";
 import { WORK_START_HOUR, WORK_START_MINUTE } from "../config";
 import type { Attendance, MediaType } from "../types";
+import { nowUz, todayStrUz, formatTimeUz } from "../utils/time";
 
 // FIX: Escape Markdown special characters in user-provided strings.
 // Addresses from reverse geocoding and usernames can contain characters like
@@ -42,9 +43,9 @@ export function registerEmployeeHandlers(bot: TelegramBot): void {
     // FIX: Location messages have no msg.text. This check MUST come before any
     // msg.text-only checks to ensure location messages are always handled.
     if (msg.location && session.state === "employee_location") {
-      const now = new Date();
-      const checkInTime = now.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" });
-      const today = now.toLocaleDateString("uz-UZ");
+      const now = nowUz();
+      const checkInTime = formatTimeUz(now);
+      const today = todayStrUz();
       const workStart = new Date(now);
       workStart.setHours(WORK_START_HOUR, WORK_START_MINUTE, 0, 0);
       const isLate = now > workStart;
@@ -156,7 +157,7 @@ export function registerEmployeeHandlers(bot: TelegramBot): void {
           const remainText = remaining <= 0 ? "🚨 Muddat o'tdi!" : `${remaining} daqiqa qoldi`;
           await bot.sendMessage(
             chatId,
-            `📋 *${task.title}*\n${task.description}\n\n⏰ ${task.deadline.toLocaleString("uz-UZ")} (${remainText})`,
+            `📋 *${task.title}*\n${task.description}\n\n⏰ ${task.deadline.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })} (${remainText})`,
             { parse_mode: "Markdown", reply_markup: kb.taskActionsKeyboard(task) }
           );
         }
@@ -164,7 +165,7 @@ export function registerEmployeeHandlers(bot: TelegramBot): void {
       if (completedTasks.length) {
         let doneText = `\n✅ *Bajarilgan topshiriqlar (${completedTasks.length}):*\n\n`;
         for (const task of completedTasks.slice(-5)) {
-          doneText += `✅ *${task.title}*\n   ${task.completedAt?.toLocaleString("uz-UZ") || "-"}\n\n`;
+          doneText += `✅ *${task.title}*\n   ${task.completedAt?.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" }) || "-"}\n\n`;
         }
         await bot.sendMessage(chatId, doneText, { parse_mode: "Markdown" });
       }
@@ -204,7 +205,7 @@ export function registerEmployeeHandlers(bot: TelegramBot): void {
         `✅ *Topshiriq bajarildi\\!*\n\n` +
         `📋 *${escapeMarkdown(task.title)}*\n` +
         `👤 Ijrochi: ${escapeMarkdown(assigneeName)}\n` +
-        `🕐 ${task.completedAt.toLocaleString("uz-UZ")}\n\n` +
+        `🕐 ${task.completedAt.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })}\n\n` +
         `📝 Natija: ${escapeMarkdown(task.result)}`;
 
       await notifyWithResult(bot, Number(task.assignedBy), task.resultFileId, task.resultMediaType, resultCaption);

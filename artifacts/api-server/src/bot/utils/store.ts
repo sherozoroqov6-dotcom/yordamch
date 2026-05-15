@@ -97,7 +97,7 @@ export function getDivisionHeads(): User[] {
 }
 
 export function getTodayAttendance(telegramId: string): Attendance | undefined {
-  const today = new Date().toLocaleDateString("uz-UZ");
+  const today = new Date().toLocaleDateString("uz-UZ", { timeZone: "Asia/Tashkent" });
   const key = `${telegramId}_${today}`;
   return attendanceToday.get(key);
 }

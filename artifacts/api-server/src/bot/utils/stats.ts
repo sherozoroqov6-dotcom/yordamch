@@ -1,6 +1,7 @@
 import * as store from "./store";
 import { DIVISIONS } from "../config";
 import type { Task } from "../types";
+import { todayStrUz, formatDateTimeUz } from "./time";
 
 export interface TaskStats {
   total: number;
@@ -51,7 +52,7 @@ export function formatTaskLine(task: Task): string {
         ? "Muddati o'tdi!"
         : `${Math.round((task.deadline.getTime() - now) / 60000)} daqiqa qoldi`
       : "Bajarildi";
-  return `${statusIcon} *${task.title}*\n   ⏰ ${task.deadline.toLocaleString("uz-UZ")} — ${remaining}`;
+  return `${statusIcon} *${task.title}*\n   ⏰ ${task.deadline.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })} — ${remaining}`;
 }
 
 export function getAdminDivisionStats(): string {
@@ -70,7 +71,7 @@ export function getAdminDivisionStats(): string {
     const divTasks = [...headTasks, ...empTasks];
     const stats = calcTaskStats(divTasks);
 
-    const today = new Date().toLocaleDateString("uz-UZ");
+    const today = todayStrUz();
     const presents = employees.filter((e) => {
       const att = store.getTodayAttendance(e.telegramId);
       return att !== undefined;
@@ -150,7 +151,7 @@ export function getHeadStats(headId: string): string {
   const empStats = calcTaskStats(empTasks);
   const allDivStats = calcTaskStats([...headTasks, ...empTasks]);
 
-  const today = new Date().toLocaleDateString("uz-UZ");
+  const today = todayStrUz();
   const presents = employees.filter((e) => store.getTodayAttendance(e.telegramId)).length;
   const lates = employees.filter((e) => store.getTodayAttendance(e.telegramId)?.isLate).length;
   const headAtt = store.getTodayAttendance(headId);
@@ -218,7 +219,7 @@ export function getEmployeeStats(empId: string): string {
   const stats = calcTaskStats(tasks);
 
   const att = store.getTodayAttendance(empId);
-  const today = new Date().toLocaleDateString("uz-UZ");
+  const today = todayStrUz();
 
   let text = `📊 *${name} — statistika*\n\n`;
   text += `📅 *Bugungi davomat (${today}):*\n`;

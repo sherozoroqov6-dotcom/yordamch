@@ -29,7 +29,7 @@ export async function sendTaskToUser(
   assignerName: string,
   recipientId: number
 ): Promise<void> {
-  const deadlineStr = task.deadline.toLocaleString("uz-UZ");
+  const deadlineStr = task.deadline.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" });
   const caption =
     `📋 *Yangi topshiriq!*\n\n` +
     `*${task.title}*\n` +

@@ -8,6 +8,7 @@ import * as ms from "../utils/multiselect";
 import * as taskSender from "../utils/taskSender";
 import { DIVISIONS } from "../config";
 import type { Task } from "../types";
+import { todayStrUz, formatDateTimeUz } from "../utils/time";
 
 const MAX_MSG_LEN = 4000;
 
@@ -100,7 +101,7 @@ export function registerAdminHandlers(bot: TelegramBot): void {
       await bot.sendMessage(chatId, "Qaysi bo'lim topshiriqlarini ko'rmoqchisiz?", { reply_markup: kb.divisionsStatsInlineKeyboard() });
 
     } else if (text === "📅 Davomat") {
-      const today = new Date().toLocaleDateString("uz-UZ");
+      const today = todayStrUz();
       const allAllowed = store.getAllUsers().filter((u) => u.isAllowed && u.role !== "admin");
       const heads = allAllowed.filter((u) => u.role === "division_head");
       const employees = allAllowed.filter((u) => u.role === "employee");
@@ -440,7 +441,7 @@ async function createAndSendTasks(
 
   await bot.sendMessage(
     chatId,
-    `✅ Topshiriq *${sent}* ta bo'lim rahbariga yuborildi!\n\n📋 *${autoTitle}*\n⏰ Muddat: ${deadline.toLocaleString("uz-UZ")}`,
+    `✅ Topshiriq *${sent}* ta bo'lim rahbariga yuborildi!\n\n📋 *${autoTitle}*\n⏰ Muddat: ${deadline.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })}`,
     { parse_mode: "Markdown" }
   );
 }

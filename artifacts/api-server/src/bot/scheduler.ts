@@ -20,7 +20,7 @@ export function startScheduler(bot: TelegramBot): void {
       if (timeLeft > 0 && timeLeft <= warningMs && !warnedTaskIds.has(task.id)) {
         warnedTaskIds.add(task.id);
         const minutesLeft = Math.round(timeLeft / 60000);
-        const warningText = `⚠️ *Muddat eslatmasi!*\n\n📋 *${task.title}*\n${task.description}\n\n⏰ Muddatga ${minutesLeft} daqiqa qoldi!\n⏱ Muddat: ${task.deadline.toLocaleString("uz-UZ")}`;
+        const warningText = `⚠️ *Muddat eslatmasi!*\n\n📋 *${task.title}*\n${task.description}\n\n⏰ Muddatga ${minutesLeft} daqiqa qoldi!\n⏱ Muddat: ${task.deadline.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })}`;
 
         try {
           await bot.sendMessage(Number(task.assignedTo), warningText, { parse_mode: "Markdown" });

@@ -205,7 +205,7 @@ export async function saveUser(user: User): Promise<void> {
       user.role,
       user.divisionId || "",
       user.isAllowed ? "Ha" : "Yo'q",
-      new Date().toLocaleString("uz-UZ"),
+      new Date().toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" }),
       "",
     ];
 
@@ -246,11 +246,11 @@ export async function saveTask(task: Task, assigneeName: string, assignerName: s
       task.assignedTo,
       assigneeName,
       assignerName,
-      task.deadline.toLocaleString("uz-UZ"),
+      task.deadline.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" }),
       task.status === "pending" ? "Kutilmoqda" : task.status === "in_progress" ? "Bajarilmoqda" : "Bajarildi",
       task.result || "",
-      task.createdAt.toLocaleString("uz-UZ"),
-      task.completedAt?.toLocaleString("uz-UZ") || "",
+      task.createdAt.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" }),
+      task.completedAt?.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" }) || "",
       task.divisionId || "",
       task.level === "admin_to_head" ? "Admin → Bo'lim rahbari" : "Bo'lim rahbari → Xodim",
       task.mediaType || "",
